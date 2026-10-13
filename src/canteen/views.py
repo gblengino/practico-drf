@@ -1,54 +1,38 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import status
+from rest_framework import status, generics
+from rest_framework.views import APIView
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .models import Product
-from .serializers import ProductSerializer
+from .models import Product, Provider, Order, OrderItem
+from .serializers import ProductSerializer, ProductPublicSerializer, ProviderSerializer
 
-@api_view(["GET", "POST"])
-def products(request):
-    if request.method == "GET":
-        products = Product.objects.all()
-        products_serialized = ProductSerializer(products, many=True)
-        return Response(
-            products_serialized.data,
-            status=status.HTTP_200_OK
-            )
+# Clase Generic APIView
+# Django utiliza una semantica propia para los metodos
+# List => Get all
+# Create => Post
+# Retrieve => Get by ID
+# Update => Put
+# Destroy => Delete
 
-    if request.method == "POST":
+class ProductsGenericAPIView(APIView):
+    def get(self, request):
+        products = Product.objects.all().select_related("provider") # Equivalente a un INNER JOIN,
+        products_serialized = ProductPublicSerializer(products, many=True)
+        return Response(products_serialized.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
         new_product_serialized = ProductSerializer(data=request.data)
         if new_product_serialized.is_valid():
             new_product_serialized.save()
-            return Response(
-                {"message":"Product created"},
-                status=status.HTTP_201_CREATED
-                )
-
-@api_view(["GET", "PUT", "DELETE"])
-def product_detail(request, pk):
-    product = get_object_or_404(Product, pk=pk)
-
-    if request.method == "GET":
-        product_serialized = ProductSerializer(product)
+            return Response({"message":"Product created"},status=status.HTTP_201_CREATED)
         return Response(
-            product_serialized.data,
-            status=status.HTTP_200_OK
-            )
+            {"message":"Invalid data"},status=status.HTTP_400_BAD_REQUEST,)
 
-    if request.method == "PUT":
-        product_serialized = ProductSerializer(product, data=request.data)
-        if product_serialized.is_valid():
-            product_serialized.save()
-            return Response(
-                {"message":"Product updated"},
-                status=status.HTTP_200_OK
-            )
+class ProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Product.objects.all().select_related("provider")
+    serializer_class = ProductSerializer
 
-    if request.method == "DELETE":
-        product.is_active = False
-        product.save()
-        return Response(
-            {"message":"Product deleted"},
-            status=status.HTTP_200_OK
-        )
+class ProviderListCreateAPIView(generics.ListCreateAPIView):
+    queryset = Provider.objects.all()
+    serializer_class = ProviderSerializer
